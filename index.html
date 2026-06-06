@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>.RLE Extension Remover</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .upload-box {
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .upload-box:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+
+        .upload-box.dragover {
+            background: #f0f4ff;
+            border-color: #764ba2;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .upload-subtext {
+            color: #999;
+            font-size: 12px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        #fileList {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        #fileList.show {
+            display: block;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+            font-size: 13px;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-name {
+            color: #333;
+            word-break: break-all;
+        }
+
+        .file-status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .file-status.removed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        #processBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        #processBtn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        #processBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #downloadBtn {
+            background: #28a745;
+            color: white;
+            display: none;
+        }
+
+        #downloadBtn:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗂️ .RLE Remover</h1>
+        <p class="subtitle">Remove .RLE extensions from ZIP files</p>
+
+        <div id="message" class="message"></div>
+
+        <div class="upload-box" id="uploadBox">
+            <div class="upload-icon">📦</div>
+            <div class="upload-text">Click to upload ZIP file</div>
+            <div class="upload-subtext">or drag and drop</div>
+            <input type="file" id="fileInput" accept=".zip" />
+        </div>
+
+        <div id="fileList" class="show">
+            <div id="filesContainer"></div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p id="loadingText">Processing ZIP file...</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText"></div>
+        </div>
+
+        <button id="processBtn" disabled>Process ZIP File</button>
+        <button id="downloadBtn">⬇️ Download Cleaned ZIP</button>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        let processedZip = null;
+        let fileList = [];
+
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const processBtn = document.getElementById('processBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const fileList_div = document.getElementById('fileList');
+        const filesContainer = document.getElementById('filesContainer');
+        const loading = document.getElementById('loading');
+        const message = document.getElementById('message');
+
+        // Click to upload
+        uploadBox.addEventListener('click', () => fileInput.click());
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        // Drag and drop
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.classList.add('dragover');
+        });
+
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.classList.remove('dragover');
+        });
+
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            if (!file.name.endsWith('.zip')) {
+                showMessage('Please select a ZIP file', 'error');
+                return;
+            }
+
+            selectedFile = file;
+            processBtn.disabled = false;
+            showMessage('', '');
+
+            // Read files from ZIP
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                JSZip.loadAsync(e.target.result).then(zip => {
+                    fileList = [];
+                    filesContainer.innerHTML = '';
+                    zip.forEach((relativePath, file) => {
+                        if (!file.dir && !relativePath.includes('__MACOSX')) {
+                            fileList.push(relativePath);
+                            const listItem = document.createElement('div');
+                            listItem.className = 'file-item';
+                            listItem.innerHTML = `
+                                <span class="file-name">${relativePath}</span>
+                                <span class="file-status">📄</span>
+                            `;
+                            filesContainer.appendChild(listItem);
+                        }
+                    });
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            loading.classList.add('show');
+            processBtn.disabled = true;
+            downloadBtn.style.display = 'none';
+
+            try {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const zip = await JSZip.loadAsync(e.target.result);
+                    const newZip = new JSZip();
+
+                    // Count files first
+                    const files = [];
+                    zip.forEach((relativePath, file) => {
+                        if (!file.dir && !relativePath.includes('__MACOSX')) {
+                            files.push({ path: relativePath, file: file });
+                        }
+                    });
+
+                    const totalFiles = files.length;
+                    document.getElementById('loadingText').textContent = `Processing ${totalFiles} files...`;
+
+                    // Process files with progress tracking
+                    for (let i = 0; i < files.length; i++) {
+                        const { path: relativePath, file } = files[i];
+                        let newPath = relativePath;
+
+                        // Remove .rle extension if it ends with .rle
+                        if (newPath.endsWith('.rle')) {
+                            newPath = newPath.slice(0, -4);
+                        }
+
+                        const fileData = await file.async('arraybuffer');
+                        newZip.file(newPath, fileData);
+
+                        // Update progress
+                        const progress = ((i + 1) / totalFiles) * 100;
+                        document.getElementById('progressFill').style.width = progress + '%';
+                        document.getElementById('progressText').textContent = `${i + 1} / ${totalFiles} files processed`;
+
+                        // Allow UI to update every 100 files
+                        if (i % 100 === 0) {
+                            await new Promise(resolve => setTimeout(resolve, 0));
+                        }
+                    }
+
+                    // Generate new ZIP
+                    document.getElementById('loadingText').textContent = 'Creating ZIP file...';
+                    processedZip = await newZip.generateAsync({ type: 'blob' });
+
+                    loading.classList.remove('show');
+                    processBtn.disabled = false;
+                    downloadBtn.style.display = 'block';
+                    showMessage(`✅ Success! ${totalFiles} files processed. Click download to get your file.`, 'success');
+
+                    // Update file list with new names (show first 20)
+                    filesContainer.innerHTML = '';
+                    for (let i = 0; i < Math.min(files.length, 20); i++) {
+                        let newPath = files[i].path;
+                        if (newPath.endsWith('.rle')) {
+                            newPath = newPath.slice(0, -4);
+                        }
+                        const listItem = document.createElement('div');
+                        listItem.className = 'file-item';
+                        listItem.innerHTML = `
+                            <span class="file-name">${newPath}</span>
+                            <span class="file-status removed">✓ Updated</span>
+                        `;
+                        filesContainer.appendChild(listItem);
+                    }
+
+                    if (files.length > 20) {
+                        const moreItem = document.createElement('div');
+                        moreItem.className = 'file-item';
+                        moreItem.innerHTML = `
+                            <span class="file-name" style="color: #667eea; font-weight: 500;">... and ${files.length - 20} more files</span>
+                        `;
+                        filesContainer.appendChild(moreItem);
+                    }
+                };
+                reader.readAsArrayBuffer(selectedFile);
+            } catch (error) {
+                console.error('Error processing ZIP:', error);
+                loading.classList.remove('show');
+                processBtn.disabled = false;
+                showMessage('❌ Error processing file: ' + error.message, 'error');
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            if (processedZip) {
+                const url = URL.createObjectURL(processedZip);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = selectedFile.name.replace('.zip', '') + '_cleaned.zip';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        });
+
+        function showMessage(text, type) {
+            message.textContent = text;
+            message.className = 'message ' + (text ? 'show ' : '') + type;
+        }
+    </script>
+</body>
+</html>
